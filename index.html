@@ -545,7 +545,8 @@
         date: '',
         participants: [],
         assignments: {},
-        seenStatus: {}
+        seenStatus: {},
+        playerCookies: {} // Добавляем отслеживание по cookies
     };
 
     // Initialize
@@ -561,10 +562,44 @@
 
         if (gameId) {
             loadGameData(gameId);
-            showPlayerScreen();
+            checkPlayerAccess();
         } else {
             showCreateScreen();
         }
+    }
+
+    // Check if player already saw their assignment
+    function checkPlayerAccess() {
+        const playerCookie = getPlayerCookie();
+        
+        if (playerCookie && currentGame.seenStatus[playerCookie]) {
+            // Игрок уже видел своего получателя - показываем результат
+            showPlayerResult(playerCookie);
+        } else {
+            // Игрок еще не видел - показываем выбор имени
+            showPlayerScreen();
+        }
+    }
+
+    // Get or create player cookie
+    function getPlayerCookie() {
+        // Проверяем есть ли уже cookie у игрока
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === `santa_player_${currentGame.id}`) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    // Set player cookie
+    function setPlayerCookie(playerName) {
+        // Устанавливаем cookie на 30 дней
+        const expires = new Date();
+        expires.setDate(expires.getDate() + 30);
+        document.cookie = `santa_player_${currentGame.id}=${playerName}; expires=${expires.toUTCString()}; path=/`;
     }
 
     // Load game data
@@ -598,12 +633,14 @@
         document.getElementById('createScreen').classList.add('active');
         document.getElementById('resultsScreen').classList.remove('active');
         document.getElementById('playerScreen').classList.remove('active');
+        document.getElementById('playerResult').style.display = 'none';
     }
 
     function showResultsScreen() {
         document.getElementById('createScreen').classList.remove('active');
         document.getElementById('resultsScreen').classList.add('active');
         document.getElementById('playerScreen').classList.remove('active');
+        document.getElementById('playerResult').style.display = 'none';
         updateAdminStats();
     }
 
@@ -611,7 +648,35 @@
         document.getElementById('createScreen').classList.remove('active');
         document.getElementById('resultsScreen').classList.remove('active');
         document.getElementById('playerScreen').classList.add('active');
+        document.getElementById('playerResult').style.display = 'none';
         updatePlayerSelect();
+    }
+
+    function showPlayerResult(playerName) {
+        document.getElementById('createScreen').classList.remove('active');
+        document.getElementById('resultsScreen').classList.remove('active');
+        document.getElementById('playerScreen').classList.add('active');
+        
+        // Прячем выбор имени и показываем результат
+        document.querySelector('#playerScreen .form-group').style.display = 'none';
+        document.querySelector('#playerScreen .btn-primary').style.display = 'none';
+        
+        const receiver = currentGame.assignments[playerName];
+        document.getElementById('userGreeting').textContent = `Привет, ${playerName}!`;
+        document.getElementById('assignmentResult').textContent = `Ты даришь подарок: ${receiver} 🎁`;
+        document.getElementById('playerResult').style.display = 'block';
+        
+        // Добавляем кнопку для выхода
+        const backButton = document.createElement('button');
+        backButton.className = 'btn btn-secondary';
+        backButton.textContent = '🔙 Выйти';
+        backButton.onclick = function() {
+            document.querySelector('#playerScreen .form-group').style.display = 'block';
+            document.querySelector('#playerScreen .btn-primary').style.display = 'block';
+            document.getElementById('playerResult').style.display = 'none';
+            backButton.remove();
+        };
+        document.getElementById('playerResult').appendChild(backButton);
     }
 
     function showGameScreen() {
@@ -665,7 +730,9 @@
 
     // Remove participant
     function removeParticipant(index) {
+        const name = currentGame.participants[index];
         currentGame.participants.splice(index, 1);
+        delete currentGame.seenStatus[name];
         updateParticipantsList();
         saveGameData();
     }
@@ -765,16 +832,19 @@
             return;
         }
 
+        // Проверяем, не выбрал ли уже кто-то это имя
+        if (currentGame.seenStatus[userName]) {
+            alert('Это имя уже было использовано! Каждый участник может узнать своего Санту только один раз.');
+            return;
+        }
+
         // Mark as seen
         currentGame.seenStatus[userName] = true;
+        setPlayerCookie(userName); // Сохраняем в cookie
         saveGameData();
 
         // Show result
-        const receiver = currentGame.assignments[userName];
-        document.getElementById('userGreeting').textContent = `Привет, ${userName}!`;
-        document.getElementById('assignmentResult').textContent = `Ты даришь подарок: ${receiver} 🎁`;
-        document.getElementById('playerResult').style.display = 'block';
-
+        showPlayerResult(userName);
         createConfetti();
     }
 
@@ -818,3 +888,4 @@
 </script>
 </body>
 </html>
+
